@@ -13,6 +13,12 @@
     "url": "https://jira.xwiki.org/projects/XWIKI/"
   },
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./src/index.ts"
+    }
+  },
   "main": "./src/index.ts",
   "scripts": {
     "api-extractor:ci": "api-extractor run",

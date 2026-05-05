@@ -14,12 +14,16 @@
     "url": "https://jira.xwiki.org/projects/XWIKI/"
   },
   "type": "module",
-  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "clean": "rimraf dist"
   },
-  "types": "./dist/index.d.ts",
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@xwiki/platform-tool-tsconfig": "workspace:*",

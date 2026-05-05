@@ -13,6 +13,11 @@
     "url": "https://jira.xwiki.org/projects/XWIKI/"
   },
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts"
+    }
+  },
   "files": [
     "dist",
     "src",
