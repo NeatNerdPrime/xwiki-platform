@@ -216,4 +216,9 @@ public class AllIT
     class NestedHTMLExportIT extends HTMLExportIT
     {
     }
+
+    @Nested
+    class NestedBreadcrumbsIT extends BreadcrumbsIT
+    {
+    }
 }
