@@ -211,4 +211,9 @@ public class AllIT
     class NestedSkinActionIT extends SkinActionIT
     {
     }
+
+    @Nested
+    class NestedHTMLExportIT extends HTMLExportIT
+    {
+    }
 }

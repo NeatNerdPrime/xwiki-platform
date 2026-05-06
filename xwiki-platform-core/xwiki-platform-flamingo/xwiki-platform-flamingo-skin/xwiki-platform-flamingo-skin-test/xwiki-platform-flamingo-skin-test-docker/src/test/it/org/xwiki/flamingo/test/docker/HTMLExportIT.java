@@ -17,43 +17,38 @@
  * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
-package org.xwiki.flamingo.test.ui;
+package org.xwiki.flamingo.test.docker;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.Charset;
-import java.util.Arrays;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.Rule;
-import org.junit.Test;
-import org.xwiki.model.reference.EntityReference;
-import org.xwiki.test.AllLogRule;
-import org.xwiki.test.LogLevel;
-import org.xwiki.test.ui.AbstractTest;
-import org.xwiki.test.ui.SuperAdminAuthenticationRule;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.xwiki.model.reference.DocumentReference;
+import org.xwiki.test.docker.junit5.UITest;
+import org.xwiki.test.ui.TestUtils;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Verify that the HTML export features works fine.
  *
  * @version $Id$
  */
-public class HTMLExportIT extends AbstractTest
+// Note: vnc is set to false since otherwise our test framework fails to take a video since no page has been accessed
+// by the test via Selenium. Since we don't need VNC, we turn it off and thus no video is taken.
+@UITest(vnc = false)
+class HTMLExportIT
 {
-    @Rule
-    public SuperAdminAuthenticationRule adminAuthenticationRule = new SuperAdminAuthenticationRule(getUtil());
-
-    @Rule
-    public AllLogRule logRule = new AllLogRule(LogLevel.WARN);
+    private String baseURL;
 
     private interface PageValidator
     {
@@ -62,7 +57,7 @@ public class HTMLExportIT extends AbstractTest
         void assertResult();
     }
 
-    private final class TopPageValidator implements PageValidator
+    private static final class TopPageValidator implements PageValidator
     {
         private boolean result;
 
@@ -71,11 +66,9 @@ public class HTMLExportIT extends AbstractTest
         {
             if (entry.getName().equals("pages/xwiki/TopPage/WebHome.html")) {
                 String content = IOUtils.toString(zis, Charset.defaultCharset());
-
-                // Verify that the content was rendered properly
-                assertTrue("Title should have contained 'Top content'", content.contains("Top content"));
-                assertTrue("Content should have contained 'Top title: Creator'",
-                    content.contains("Top title: Creator"));
+                assertTrue(content.contains("Top content"), "Title should have contained 'Top content'");
+                assertTrue(content.contains("Top title: Creator"),
+                    "Content should have contained 'Top title: Creator'");
                 this.result = true;
             }
         }
@@ -83,11 +76,11 @@ public class HTMLExportIT extends AbstractTest
         @Override
         public void assertResult()
         {
-            assertTrue("Failed to find the pages/xwiki/TopPage/WebHome.html entry", this.result);
+            assertTrue(this.result, "Failed to find the pages/xwiki/TopPage/WebHome.html entry");
         }
     }
 
-    private final class NestedPageValidator implements PageValidator
+    private static final class NestedPageValidator implements PageValidator
     {
         private boolean result;
 
@@ -96,10 +89,9 @@ public class HTMLExportIT extends AbstractTest
         {
             if (entry.getName().equals("pages/xwiki/TopPage/NestedPage/WebHome.html")) {
                 String content = IOUtils.toString(zis, Charset.defaultCharset());
-
-                // Verify that the link to a locally exported page is correct
-                assertTrue("Content should have contained a local link to the Top page",
-                    content.contains("<a href=\"../../../../pages/xwiki/TopPage/WebHome.html\">top</a>"));
+                assertTrue(
+                    content.contains("<a href=\"../../../../pages/xwiki/TopPage/WebHome.html\">top</a>"),
+                    "Content should have contained a local link to the Top page");
                 this.result = true;
             }
         }
@@ -107,51 +99,46 @@ public class HTMLExportIT extends AbstractTest
         @Override
         public void assertResult()
         {
-            assertTrue("Failed to find the pages/xwiki/TopPage/NestedPage/WebHome.html entry", this.result);
+            assertTrue(this.result, "Failed to find the pages/xwiki/TopPage/NestedPage/WebHome.html entry");
         }
     }
 
-    @Test
-    public void exportHTML() throws Exception
+    @BeforeEach
+    void setUp(TestUtils setup)
     {
-        // Step 1: Create 2 pages that we'll then export
+        this.baseURL = setup.getCurrentExecutor().getHttpClientBaseURL();
+        setup.loginAsSuperAdmin();
 
-        EntityReference topReference = getUtil().resolveDocumentReference("TopPage.WebHome");
-        getUtil().deletePage(topReference);
-        EntityReference nestedReference = getUtil().resolveDocumentReference("TopPage.NestedPage.WebHome");
-        getUtil().deletePage(nestedReference);
+        setup.deletePage("TopPage", "WebHome");
+        setup.deletePage(new DocumentReference("xwiki", List.of("TopPage", "NestedPage"), "WebHome"));
 
         // Note: Verify that Velocity is correctly evaluated
-        getUtil().createPage(topReference, "Top content", "Top title: $services.localization.render('creator')");
+        setup.createPage("TopPage", "WebHome", "Top content",
+            "Top title: $services.localization.render('creator')");
         // Note: we define a link to the top page to verify that the export will resolve the links locally when the
         // page linked is part of the export.
-        getUtil().createPage(nestedReference, "[[top>>TopPage.WebHome]]", "Nested Page");
+        setup.createPage(List.of("TopPage", "NestedPage"), "WebHome", "[[top>>TopPage.WebHome]]", "Nested Page");
+    }
 
-        // Step 2: Call the export URL to get the ZIP and to assert its content, when no "pages" query string param is
+    @Test
+    void exportHTML() throws Exception
+    {
+        // Step 1: Call the export URL to get the ZIP and to assert its content, when no "pages" query string param is
         //         used (only the TopPage will be exported)
-        assertHTMLExportURL("http://localhost:8080/xwiki/bin/export/TopPage/WebHome?format=html",
-            Arrays.asList(new TopPageValidator()));
+        assertHTMLExportURL(this.baseURL + "bin/export/TopPage/WebHome?format=html",
+            List.of(new TopPageValidator()));
 
-        // Step 3: Call the export URL to get the ZIP and to assert its content, when a "pages" query string param is
+        // Step 2: Call the export URL to get the ZIP and to assert its content, when a "pages" query string param is
         //         used with some regex
-        assertHTMLExportURL("http://localhost:8080/xwiki/bin/export/UnexistingSpace/UnexistingPage?format=html"
-            + "&pages=TopPage.%25", Arrays.asList(new TopPageValidator(),  new NestedPageValidator()));
-
-        // Verify that there was no warning or more severe logs output to the console.
-        StringBuilder builder = new StringBuilder("Should not have got the following logs [\n");
-        for (int i = 0; i < this.logRule.size(); i++) {
-            builder.append(" - ["). append(this.logRule.getMessage(i)).append("]\n");
-        }
-        builder.append("]");
-        assertEquals(builder.toString(), 0, this.logRule.size());
+        assertHTMLExportURL(
+            this.baseURL + "bin/export/UnexistingSpace/UnexistingPage?format=html&pages=TopPage.%25",
+            List.of(new TopPageValidator(), new NestedPageValidator()));
     }
 
     private void assertHTMLExportURL(String htmlExportURL, List<PageValidator> validators) throws Exception
     {
         URL url = new URL(htmlExportURL);
-
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-
         InputStream is = connection.getInputStream();
         ZipInputStream zis = new ZipInputStream(is);
 
@@ -177,8 +164,6 @@ public class HTMLExportIT extends AbstractTest
                 IOUtils.readLines(zis, Charset.defaultCharset());
             } else if (entry.getName().startsWith("skins/")) {
                 foundSkinsDirectory = true;
-                // Verify that the skin is correctly going to be applied by verifying the flamingo/style.min.css file is
-                // found and is correctly referenced. This fixes https://jira.xwiki.org/browse/XWIKI-9145
                 if (entry.getName().equals("skins/flamingo/style.min.css")) {
                     assertSkinIsActive(IOUtils.readLines(zis, Charset.defaultCharset()));
                     foundSkinCSS = true;
@@ -186,7 +171,6 @@ public class HTMLExportIT extends AbstractTest
                     IOUtils.readLines(zis, Charset.defaultCharset());
                 }
             } else if (entry.getName().startsWith("webjars")) {
-                // We verify here that webjars URLs have been properly exported
                 foundWebjars = true;
                 IOUtils.readLines(zis, Charset.defaultCharset());
             } else {
@@ -197,17 +181,17 @@ public class HTMLExportIT extends AbstractTest
         for (PageValidator validator : validators) {
             validator.assertResult();
         }
-        assertTrue("Failed to find the resources/ directory entry", foundResourcesDirectory);
-        assertTrue("Failed to find the skins/ directory entry", foundSkinsDirectory);
-        assertTrue("Failed to find the link to colibri.css in style.min.css", foundSkinCSS);
-        assertTrue("Failed to find webjar resources in the HTML export", foundWebjars);
+        assertTrue(foundResourcesDirectory, "Failed to find the resources/ directory entry");
+        assertTrue(foundSkinsDirectory, "Failed to find the skins/ directory entry");
+        assertTrue(foundSkinCSS, "Failed to find the link to colibri.css in style.min.css");
+        assertTrue(foundWebjars, "Failed to find webjar resources in the HTML export");
 
         zis.close();
     }
 
-    private void assertSkinIsActive(List<String> content) throws Exception
+    private void assertSkinIsActive(List<String> content)
     {
-        assertTrue("style.min.css is not the one output by the flamingo skin", StringUtils.join(content.toArray())
-            .contains("skin-flamingo"));
+        assertTrue(StringUtils.join(content.toArray()).contains("skin-flamingo"),
+            "style.min.css is not the one output by the flamingo skin");
     }
 }
