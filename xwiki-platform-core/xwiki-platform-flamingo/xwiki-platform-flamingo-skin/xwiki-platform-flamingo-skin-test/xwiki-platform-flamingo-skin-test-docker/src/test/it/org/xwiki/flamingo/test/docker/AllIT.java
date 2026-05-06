@@ -221,4 +221,9 @@ public class AllIT
     class NestedBreadcrumbsIT extends BreadcrumbsIT
     {
     }
+
+    @Nested
+    class NestedCreatePageNestedDocumentsIT extends CreatePageNestedDocumentsIT
+    {
+    }
 }

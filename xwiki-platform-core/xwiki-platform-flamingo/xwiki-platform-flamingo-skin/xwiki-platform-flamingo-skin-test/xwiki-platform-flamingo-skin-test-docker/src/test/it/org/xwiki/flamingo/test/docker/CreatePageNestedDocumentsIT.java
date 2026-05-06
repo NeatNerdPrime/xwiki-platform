@@ -17,28 +17,28 @@
  * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
-package org.xwiki.flamingo.test.ui;
+package org.xwiki.flamingo.test.docker;
 
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
 import org.xwiki.model.reference.DocumentReference;
 import org.xwiki.model.reference.EntityReference;
 import org.xwiki.model.reference.SpaceReference;
 import org.xwiki.model.reference.WikiReference;
-import org.xwiki.test.ui.AbstractTest;
-import org.xwiki.test.ui.SuperAdminAuthenticationRule;
+import org.xwiki.test.docker.junit5.UITest;
+import org.xwiki.test.ui.TestUtils;
 import org.xwiki.test.ui.po.BreadcrumbElement;
 import org.xwiki.test.ui.po.CreatePagePage;
 import org.xwiki.test.ui.po.DocumentDoesNotExistPage;
 import org.xwiki.test.ui.po.ViewPage;
 import org.xwiki.test.ui.po.editor.EditPage;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Tests that the create action and UI properly create Nested Documents at various levels in the hierarchy.
@@ -46,15 +46,13 @@ import static org.junit.Assert.assertFalse;
  * @version $Id$
  * @since 7.2RC1
  */
-public class CreatePageNestedDocumentsIT extends AbstractTest
+@UITest
+class CreatePageNestedDocumentsIT
 {
-    @Rule
-    public SuperAdminAuthenticationRule authenticationRule = new SuperAdminAuthenticationRule(getUtil());
-
     // @formatter:off
-    public static List<DocumentReference> nestedDocuments = Arrays.asList(
+    static List<DocumentReference> nestedDocuments = Arrays.asList(
         // /A (Top level document)
-        new DocumentReference("xwiki", Arrays.asList("A"), "WebHome"),
+        new DocumentReference("xwiki", List.of("A"), "WebHome"),
         // /A/B (Child document of a top level document, A)
         new DocumentReference("xwiki", Arrays.asList("A", "B"), "WebHome"),
         // /A/B/C (Child document of a child document, B)
@@ -69,42 +67,45 @@ public class CreatePageNestedDocumentsIT extends AbstractTest
         new DocumentReference("xwiki", Arrays.asList("X", "Y"), "WebHome"));
     // @formatter:on
 
-    @Before
-    public void setup() throws Exception
+    @BeforeEach
+    void setUp(TestUtils setup) throws Exception
     {
+        setup.loginAsSuperAdmin();
         // Cleanup to avoid problems from previous runs.
         for (DocumentReference pageReference : nestedDocuments) {
-            getUtil().rest().delete(pageReference);
+            setup.rest().delete(pageReference);
         }
     }
 
     @Test
-    public void createNestedDocumentsFromURL()
+    @Order(1)
+    void createNestedDocumentsFromURL(TestUtils setup)
     {
         // Create and assert each nested document.
         for (DocumentReference pageReference : nestedDocuments) {
             // Navigate from URL to the page in view mode, using the no-WebHome URL, e.g. /A instead of /A/WebHome
             SpaceReference spaceReference = pageReference.getLastSpaceReference();
-            ViewPage viewPage = getUtil().gotoPage(spaceReference);
+            ViewPage viewPage = setup.gotoPage(spaceReference);
 
             // It should not exist and we will create it.
-            assertFalse(String.format("Document [%s] already exists", pageReference), viewPage.exists());
+            assertFalse(viewPage.exists(), String.format("Document [%s] already exists", pageReference));
             new DocumentDoesNotExistPage().clickEditThisPageToCreate();
             new CreatePagePage().clickCreate();
             EditPage editPage = new EditPage();
             viewPage = editPage.clickSaveAndView();
 
             // Check that we created the right page
-            assertCreatedNestedDocument(pageReference, viewPage);
+            assertCreatedNestedDocument(setup, pageReference, viewPage);
         }
     }
 
     @Test
-    public void createNestedDocumentsFromUI()
+    @Order(2)
+    void createNestedDocumentsFromUI(TestUtils setup)
     {
         // Create the homepage if it does not exist and start the test from there.
         DocumentReference homepage = new DocumentReference("xwiki", "Main", "WebHome");
-        ViewPage viewPage = getUtil().createPage(homepage, "", "Home Page");
+        ViewPage viewPage = setup.createPage(homepage, "", "Home Page");
 
         // Create and assert each nested document.
         for (DocumentReference pageReference : nestedDocuments) {
@@ -116,7 +117,7 @@ public class CreatePageNestedDocumentsIT extends AbstractTest
             // Determine the values to fill in the form.
             WikiReference wikiReference = spaceReference.getWikiReference();
             EntityReference localParentSpaceReference = spaceReference.removeParent(wikiReference).getParent();
-            String spaceReferenceString = getUtil().serializeReference(localParentSpaceReference);
+            String spaceReferenceString = setup.serializeReference(localParentSpaceReference);
             String pageName = spaceReference.getName();
 
             // Fill in the form and submit it, using the space name as title.
@@ -126,11 +127,11 @@ public class CreatePageNestedDocumentsIT extends AbstractTest
             viewPage = editPage.clickSaveAndView();
 
             // Check that we created the right page
-            assertCreatedNestedDocument(pageReference, viewPage);
+            assertCreatedNestedDocument(setup, pageReference, viewPage);
         }
     }
 
-    private void assertCreatedNestedDocument(DocumentReference pageReference, ViewPage viewPage)
+    private void assertCreatedNestedDocument(TestUtils setup, DocumentReference pageReference, ViewPage viewPage)
     {
         SpaceReference spaceReference = pageReference.getLastSpaceReference();
 
@@ -138,8 +139,8 @@ public class CreatePageNestedDocumentsIT extends AbstractTest
         if (breadcrumb.canBeExpanded()) {
             breadcrumb.expand();
         }
-        assertEquals("/" + getUtil().getURLFragment(spaceReference), breadcrumb.getPathAsString());
+        assertEquals("/" + setup.getURLFragment(spaceReference), breadcrumb.getPathAsString());
         assertEquals(spaceReference.getName(), viewPage.getDocumentTitle());
-        assertEquals(getUtil().serializeReference(pageReference), viewPage.getMetaDataValue("reference"));
+        assertEquals(setup.serializeReference(pageReference), viewPage.getMetaDataValue("reference"));
     }
 }
